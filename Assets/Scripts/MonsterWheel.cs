@@ -5,6 +5,12 @@ using UnityEngine.UI;
 
 public class MonsterWheel : MonoBehaviour
 {
+    public enum WheelState
+    {
+        Spin,
+        Stopping,
+        Stoped
+    }
     [Header("Preferences")]
     [SerializeField] private RectTransform cellHolder;
     [SerializeField] private RectTransform slotGroup;
@@ -36,8 +42,10 @@ public class MonsterWheel : MonoBehaviour
     private int spinIndex;
     //Index of target item
     private int slotIndex;
+    private float step = float.MaxValue;
+    private RectTransform selectSlotImage;
     //Wheel status
-    private bool isSpin;
+    private WheelState isSpin = WheelState.Stoped;
 
     void Start()
     {
@@ -47,9 +55,13 @@ public class MonsterWheel : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && !isSpin)
+        if (Input.GetKeyDown(KeyCode.Space) && isSpin == WheelState.Stoped)
         {
             Spin();
+        }
+        else if (Input.GetKeyDown(KeyCode.Space) && isSpin == WheelState.Spin)
+        {
+            StopSpin();
         }
     }
 
@@ -121,55 +133,86 @@ public class MonsterWheel : MonoBehaviour
     /// </summary>
     private void Spin()
     {
+        isSpin = WheelState.Spin;
+        StartCoroutine(WaitStopSpin());
+    }
+    /// <summary>
+    /// Random item index and calculates the number of steps to reach the goal
+    /// </summary>
+    private void StopSpin()
+    {
+        isSpin = WheelState.Stopping;
         slotIndex = Random.Range(0, items.Count);
         //number of steps from current index to random index
-        int step = spinIndex > slotIndex ? slotIndex - spinIndex : items.Count - spinIndex + slotIndex;
+        int temp = spinIndex > slotIndex ? slotIndex - spinIndex : items.Count - spinIndex + slotIndex;
         //The number of wheel revolutions is added
-        step = step + items.Count * spinRoundMultiplier;
+        step += temp + items.Count * spinRoundMultiplier;
         Debug.LogWarning("Index random : "+ slotIndex);
-        StartCoroutine(WaitSpin(step));
     }
-
-    private IEnumerator WaitSpin(float step)
+    /// <summary>
+    /// Wait for the rotation to stop at the randomized item
+    /// </summary>
+    private IEnumerator WaitStopSpin()
     {
-        isSpin = true;
-        float timer = step;
+        float timer = 0;
         float speed = wheelMaxSpeed;
 
-        while (timer > 0)
+        while (timer < step)
         {
+            if (isSpin == WheelState.Spin)
+            {
+                step = timer + 18f;
+            }
             //The speed will gradually increase from min to max in the first round
             //The speed will gradually decrease from max to min in the last round
             //The remaining rounds always reach maximum speed
-            if (step - timer <= items.Count)
-            {
-                speed = Mathf.Lerp(wheelMinSpeed, wheelMaxSpeed, (step - timer ) / items.Count);
-            }
-            else if(timer <= items.Count)
+            if (timer <= items.Count && isSpin == WheelState.Spin)
             {
                 speed = Mathf.Lerp(wheelMinSpeed, wheelMaxSpeed, timer / items.Count);
+            }
+            else if (step - timer < items.Count)
+            {
+                speed = Mathf.Lerp(wheelMinSpeed, wheelMaxSpeed, (step - timer) / items.Count);
             }
             else
             {
                 speed = wheelMaxSpeed;
             }
+
             //Change the selected item when moving to a new step
-            if (Mathf.CeilToInt(timer - Time.deltaTime * speed) < Mathf.CeilToInt(timer))
+            if (Mathf.CeilToInt(timer + Time.deltaTime * speed) > Mathf.CeilToInt(timer))
             {
                 items[spinIndex].StartEffect();
                 spinIndex++;
                 if (spinIndex >= items.Count) spinIndex = 0;
             }
             //Move slot according to current step progression
-            MoveSlot(Time.deltaTime * speed ,  Mathf.FloorToInt(timer) == 1);
-            timer -= Time.deltaTime * speed;
+            MoveSlot(Time.deltaTime * speed ,  Mathf.FloorToInt(step - timer) == 1);
+            timer += Time.deltaTime * speed;
             yield return null;
         }
         //Select item when wheel stops
         items[slotIndex].Select();
         Debug.LogWarning("Wheel stop at index : " + spinIndex);
-        isSpin = false;
+        while (selectSlotImage.anchoredPosition.y > -50f)
+        {
+            yield return null;
+            float percent = Time.deltaTime * wheelMinSpeed;
+            MoveSlot(percent, false);
+        }
+        while (true)
+        {
+            yield return null;
+            float percent = Time.deltaTime * wheelMinSpeed * (selectSlotImage.anchoredPosition.y > 0 ? 1 : -1 );
+            MoveSlot(percent, false);
+            if(Mathf.Abs(selectSlotImage.anchoredPosition.y) < 1f)
+            {
+                break;
+            }
+        }
+        isSpin = WheelState.Stoped;
     }
+
     /// <summary>
     /// The function moves slots
     /// </summary>
@@ -190,6 +233,7 @@ public class MonsterWheel : MonoBehaviour
                 if (isLast)
                 {
                     image.sprite = sprites[slotIndex % sprites.Count];
+                    selectSlotImage = image.rectTransform;
                 }
                 else
                 {

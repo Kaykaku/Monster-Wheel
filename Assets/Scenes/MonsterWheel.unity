@@ -368,7 +368,7 @@ MonoBehaviour:
   cellSpacing: {x: 20, y: 20}
   rows: 7
   cols: 4
-  spinRoundMultiplier: 4
+  spinRoundMultiplier: 1
   wheelMinSpeed: 2
   wheelMaxSpeed: 12
   cellEffectTime: 0.7
